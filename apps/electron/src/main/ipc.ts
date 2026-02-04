@@ -10,8 +10,9 @@ import { ipcLog, windowLog } from './logger'
 import { WindowManager } from './window-manager'
 import { registerOnboardingHandlers } from './onboarding'
 import { IPC_CHANNELS, type FileAttachment, type StoredAttachment, type AuthType, type ApiSetupInfo, type SendMessageOptions } from '../shared/types'
+import { createUsageMonitorService } from './usage-monitor'
 import { readFileAttachment, perf, validateImageForClaudeAPI, IMAGE_LIMITS } from '@craft-agent/shared/utils'
-import { getAuthType, setAuthType, getPreferencesPath, getCustomModel, setCustomModel, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getAnthropicBaseUrl, setAnthropicBaseUrl, loadStoredConfig, saveConfig, type Workspace, SUMMARIZATION_MODEL } from '@craft-agent/shared/config'
+import { getAuthType, setAuthType, getPreferencesPath, getCustomModel, setCustomModel, getModel, setModel, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, getAnthropicBaseUrl, setAnthropicBaseUrl, loadStoredConfig, saveConfig, loadUsageMonitorConfig, setUsageMonitorPlan, setUsageMonitorProLimit, getUsageMonitorEnabled, setUsageMonitorEnabled, type Workspace, SUMMARIZATION_MODEL } from '@craft-agent/shared/config'
 import { getSessionAttachmentsPath } from '@craft-agent/shared/sessions'
 import { loadWorkspaceSources, getSourcesBySlugs, type LoadedSource } from '@craft-agent/shared/sources'
 import { isValidThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -117,6 +118,9 @@ async function validateFilePath(filePath: string): Promise<string> {
 }
 
 export function registerIpcHandlers(sessionManager: SessionManager, windowManager: WindowManager): void {
+  const usageMonitorService = createUsageMonitorService(windowManager)
+  usageMonitorService.start()
+
   // Get all sessions
   ipcMain.handle(IPC_CHANNELS.GET_SESSIONS, async () => {
     const end = perf.start('ipc.getSessions')
@@ -2361,6 +2365,73 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // ============================================================
   // Notifications and Badge
   // ============================================================
+
+  // ============================================================
+  // Usage Monitor
+  // ============================================================
+
+  ipcMain.handle(IPC_CHANNELS.USAGE_MONITOR_GET_SNAPSHOT, async () => {
+    return await usageMonitorService.getSnapshot()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.USAGE_MONITOR_GET_CONFIG, async () => {
+    const config = loadUsageMonitorConfig()
+    const limits = {
+      pro: config.limits.pro,
+      max5: config.limits.pro * 5,
+      max20: config.limits.pro * 20,
+    }
+    return {
+      ...config,
+      limits,
+      enabled: getUsageMonitorEnabled(),
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.USAGE_MONITOR_SET_PLAN, async (_event, plan: 'pro' | 'max5' | 'max20') => {
+    setUsageMonitorPlan(plan)
+    const config = loadUsageMonitorConfig()
+    const limits = {
+      pro: config.limits.pro,
+      max5: config.limits.pro * 5,
+      max20: config.limits.pro * 20,
+    }
+    windowManager.broadcastToAll(IPC_CHANNELS.USAGE_MONITOR_CONFIG_CHANGED, {
+      ...config,
+      limits,
+      enabled: getUsageMonitorEnabled(),
+    })
+    void usageMonitorService.refreshAndBroadcast()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.USAGE_MONITOR_SET_PRO_LIMIT, async (_event, limit: number) => {
+    setUsageMonitorProLimit(limit)
+    const config = loadUsageMonitorConfig()
+    const limits = {
+      pro: config.limits.pro,
+      max5: config.limits.pro * 5,
+      max20: config.limits.pro * 20,
+    }
+    windowManager.broadcastToAll(IPC_CHANNELS.USAGE_MONITOR_CONFIG_CHANGED, {
+      ...config,
+      limits,
+      enabled: getUsageMonitorEnabled(),
+    })
+    void usageMonitorService.refreshAndBroadcast()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.USAGE_MONITOR_GET_ENABLED, async () => {
+    return getUsageMonitorEnabled()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.USAGE_MONITOR_SET_ENABLED, async (_event, enabled: boolean) => {
+    setUsageMonitorEnabled(enabled)
+    const config = loadUsageMonitorConfig()
+    windowManager.broadcastToAll(IPC_CHANNELS.USAGE_MONITOR_CONFIG_CHANGED, {
+      ...config,
+      enabled,
+    })
+  })
 
   // Show a notification
   ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SHOW, async (_event, title: string, body: string, workspaceId: string, sessionId: string) => {

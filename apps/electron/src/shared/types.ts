@@ -670,6 +670,16 @@ export const IPC_CHANNELS = {
   NOTIFICATION_GET_ENABLED: 'notification:getEnabled',
   NOTIFICATION_SET_ENABLED: 'notification:setEnabled',
 
+  // Usage Monitor
+  USAGE_MONITOR_GET_SNAPSHOT: 'usageMonitor:getSnapshot',
+  USAGE_MONITOR_STATS_CHANGED: 'usageMonitor:statsChanged',  // Broadcast: UsageMonitorSnapshot
+  USAGE_MONITOR_GET_CONFIG: 'usageMonitor:getConfig',
+  USAGE_MONITOR_SET_PLAN: 'usageMonitor:setPlan',
+  USAGE_MONITOR_SET_PRO_LIMIT: 'usageMonitor:setProLimit',
+  USAGE_MONITOR_GET_ENABLED: 'usageMonitor:getEnabled',
+  USAGE_MONITOR_SET_ENABLED: 'usageMonitor:setEnabled',
+  USAGE_MONITOR_CONFIG_CHANGED: 'usageMonitor:configChanged',  // Broadcast: UsageMonitorConfig
+
   BADGE_UPDATE: 'badge:update',
   BADGE_CLEAR: 'badge:clear',
   BADGE_SET_ICON: 'badge:setIcon',
@@ -711,6 +721,22 @@ export interface ToolIconMapping {
   /** Data URL of the icon (e.g., data:image/png;base64,...) */
   iconDataUrl: string
   commands: string[]
+}
+
+export interface UsageMonitorSnapshot {
+  status: 'ok' | 'missing' | 'unavailable'
+  totalTokens: number
+  windowMs: number
+  oldestTimestampMs: number | null
+  resetAtMs: number | null
+  plan: 'pro' | 'max5' | 'max20'
+  limit: number
+}
+
+export interface UsageMonitorConfigPayload {
+  plan: 'pro' | 'max5' | 'max20'
+  limits: { pro: number; max5: number; max20: number }
+  enabled: boolean
 }
 
 // Type-safe IPC API exposed to renderer
@@ -928,6 +954,16 @@ export interface ElectronAPI {
   showNotification(title: string, body: string, workspaceId: string, sessionId: string): Promise<void>
   getNotificationsEnabled(): Promise<boolean>
   setNotificationsEnabled(enabled: boolean): Promise<void>
+
+  // Usage Monitor
+  getUsageMonitorSnapshot(): Promise<UsageMonitorSnapshot>
+  onUsageMonitorStatsChanged(callback: (snapshot: UsageMonitorSnapshot) => void): () => void
+  getUsageMonitorConfig(): Promise<UsageMonitorConfigPayload>
+  setUsageMonitorPlan(plan: 'pro' | 'max5' | 'max20'): Promise<void>
+  setUsageMonitorProLimit(limit: number): Promise<void>
+  getUsageMonitorEnabled(): Promise<boolean>
+  setUsageMonitorEnabled(enabled: boolean): Promise<void>
+  onUsageMonitorConfigChanged(callback: (config: UsageMonitorConfigPayload) => void): () => void
 
   updateBadgeCount(count: number): Promise<void>
   clearBadgeCount(): Promise<void>

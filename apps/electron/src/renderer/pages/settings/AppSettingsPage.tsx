@@ -29,11 +29,14 @@ import {
   SettingsCard,
   SettingsRow,
   SettingsToggle,
+  SettingsSegmentedControl,
+  SettingsInput,
 } from '@/components/settings'
 import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import { OnboardingWizard } from '@/components/onboarding'
 import { useAppShellContext } from '@/context/AppShellContext'
+const DEFAULT_PRO_LIMIT = 5_500_000
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
@@ -55,6 +58,12 @@ export default function AppSettingsPage() {
 
   // Notifications state
   const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+  const [usageMonitorEnabled, setUsageMonitorEnabled] = useState(true)
+  const [usageMonitorPlan, setUsageMonitorPlanState] = useState<'pro' | 'max5' | 'max20'>('pro')
+  const [usageMonitorLimits, setUsageMonitorLimits] = useState({ pro: DEFAULT_PRO_LIMIT, max5: DEFAULT_PRO_LIMIT * 5, max20: DEFAULT_PRO_LIMIT * 20 })
+  const [usageMonitorTokens, setUsageMonitorTokens] = useState<number | null>(null)
+  const [isEditingUsageLimit, setIsEditingUsageLimit] = useState(false)
+  const [usageLimitInput, setUsageLimitInput] = useState(String(DEFAULT_PRO_LIMIT))
 
   // Auto-update state
   const updateChecker = useUpdateChecker()
@@ -70,6 +79,23 @@ export default function AppSettingsPage() {
   }, [updateChecker])
 
   // Load current API connection info and notifications on mount
+  const loadUsageMonitorData = useCallback(async () => {
+    if (!window.electronAPI) return
+    try {
+      const [usageMonitorConfig, usageSnapshot] = await Promise.all([
+        window.electronAPI.getUsageMonitorConfig(),
+        window.electronAPI.getUsageMonitorSnapshot(),
+      ])
+      setUsageMonitorEnabled(usageMonitorConfig.enabled)
+      setUsageMonitorPlanState(usageMonitorConfig.plan)
+      setUsageMonitorLimits(usageMonitorConfig.limits)
+      setUsageLimitInput(String(usageMonitorConfig.limits.pro))
+      setUsageMonitorTokens(usageSnapshot.totalTokens ?? null)
+    } catch (error) {
+      console.error('Failed to load usage monitor settings:', error)
+    }
+  }, [])
+
   const loadConnectionInfo = useCallback(async () => {
     if (!window.electronAPI) return
     try {
@@ -87,6 +113,7 @@ export default function AppSettingsPage() {
 
   useEffect(() => {
     loadConnectionInfo()
+    loadUsageMonitorData()
   }, [])
 
   // Helpers to open/close the fullscreen API setup overlay
@@ -128,6 +155,47 @@ export default function AppSettingsPage() {
     await window.electronAPI.setNotificationsEnabled(enabled)
   }, [])
 
+  const handleUsageMonitorEnabledChange = useCallback(async (enabled: boolean) => {
+    setUsageMonitorEnabled(enabled)
+    await window.electronAPI.setUsageMonitorEnabled(enabled)
+  }, [])
+
+  const handleUsageMonitorPlanChange = useCallback(async (plan: 'pro' | 'max5' | 'max20') => {
+    setUsageMonitorPlanState(plan)
+    await window.electronAPI.setUsageMonitorPlan(plan)
+  }, [])
+
+  const handleUsageMonitorLimitSave = useCallback(async () => {
+    const parsed = Number(usageLimitInput.replace(/,/g, '').trim())
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setUsageLimitInput(String(usageMonitorLimits.pro))
+      setIsEditingUsageLimit(false)
+      return
+    }
+    await window.electronAPI.setUsageMonitorProLimit(parsed)
+    setUsageMonitorLimits({
+      pro: Math.floor(parsed),
+      max5: Math.floor(parsed) * 5,
+      max20: Math.floor(parsed) * 20,
+    })
+    setIsEditingUsageLimit(false)
+  }, [usageLimitInput, usageMonitorLimits.pro])
+
+  const handleUsageMonitorLimitReset = useCallback(async () => {
+    await window.electronAPI.setUsageMonitorProLimit(DEFAULT_PRO_LIMIT)
+    setUsageMonitorLimits({
+      pro: DEFAULT_PRO_LIMIT,
+      max5: DEFAULT_PRO_LIMIT * 5,
+      max20: DEFAULT_PRO_LIMIT * 20,
+    })
+    setUsageLimitInput(String(DEFAULT_PRO_LIMIT))
+  }, [])
+
+  const handleUsageMonitorLimitCancel = useCallback(() => {
+    setUsageLimitInput(String(usageMonitorLimits.pro))
+    setIsEditingUsageLimit(false)
+  }, [usageMonitorLimits.pro])
+
   return (
     <div className="h-full flex flex-col">
       <PanelHeader title="App Settings" actions={<HeaderMenu route={routes.view.settings('app')} helpFeature="app-settings" />} />
@@ -167,6 +235,118 @@ export default function AppSettingsPage() {
                   >
                     Edit
                   </Button>
+                </SettingsRow>
+              </SettingsCard>
+            </SettingsSection>
+
+            {/* Usage Monitor */}
+            <SettingsSection title="Usage Monitor" description="Tracks Claude Code rolling 5-hour token usage.">
+              <SettingsCard>
+                <SettingsToggle
+                  label="Show Usage Monitor"
+                  description="Display token usage in the left sidebar."
+                  checked={usageMonitorEnabled}
+                  onCheckedChange={handleUsageMonitorEnabledChange}
+                />
+                <SettingsRow
+                  label="Current session tokens"
+                  description="Tokens consumed in the active 5-hour session block."
+                >
+                  <span className="text-sm text-muted-foreground">
+                    {usageMonitorTokens === null ? '—' : usageMonitorTokens.toLocaleString()}
+                  </span>
+                </SettingsRow>
+                <SettingsRow
+                  label="Plan"
+                  description={
+                    usageMonitorPlan === 'pro'
+                      ? 'Pro plan offers 5 times more usage per session than the Free plan.'
+                      : usageMonitorPlan === 'max5'
+                        ? 'Max 5x provides 5 times more usage per session than the Pro plan.'
+                        : 'Max 20x provides 20 times more usage per session than the Pro plan.'
+                  }
+                >
+                  <div className="flex items-center gap-2">
+                    <SettingsSegmentedControl
+                      value={usageMonitorPlan}
+                      onValueChange={handleUsageMonitorPlanChange}
+                      options={[
+                        { value: 'pro', label: 'Pro' },
+                        { value: 'max5', label: 'Max 5' },
+                        { value: 'max20', label: 'Max 20' },
+                      ]}
+                      size="sm"
+                    />
+                  </div>
+                </SettingsRow>
+                <SettingsRow
+                  label="Token Limits"
+                  description={`Pro - ${usageMonitorLimits.pro.toLocaleString()} | Max 5 - ${usageMonitorLimits.max5.toLocaleString()} | Max 20 - ${usageMonitorLimits.max20.toLocaleString()}`}
+                >
+                  <div className="flex items-center gap-2">
+                    {!isEditingUsageLimit ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setIsEditingUsageLimit(true)
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        {usageMonitorLimits.pro !== DEFAULT_PRO_LIMIT && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleUsageMonitorLimitReset()
+                            }}
+                          >
+                            Reset
+                          </Button>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <SettingsInput
+                          value={usageLimitInput}
+                          onChange={setUsageLimitInput}
+                          placeholder="Custom limit"
+                          className="w-[200px] min-w-[180px]"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              handleUsageMonitorLimitSave()
+                            }
+                          }}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleUsageMonitorLimitSave()
+                          }}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleUsageMonitorLimitCancel()
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </SettingsRow>
               </SettingsCard>
             </SettingsSection>

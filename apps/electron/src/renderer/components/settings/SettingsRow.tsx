@@ -61,7 +61,7 @@ export function SettingsRow({
       <div className="flex-1 min-w-0">
         <div className={settingsUI.label}>{label}</div>
         {description && (
-          <div className={cn(settingsUI.description, settingsUI.labelDescriptionGap, 'truncate')}>
+          <div className={cn(settingsUI.description, settingsUI.labelDescriptionGap, 'whitespace-pre-wrap')}>
             {description}
           </div>
         )}

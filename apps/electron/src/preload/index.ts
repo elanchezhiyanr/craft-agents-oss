@@ -374,6 +374,37 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_ENABLED) as Promise<boolean>,
   setNotificationsEnabled: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_ENABLED, enabled),
+  // Usage Monitor
+  getUsageMonitorSnapshot: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.USAGE_MONITOR_GET_SNAPSHOT),
+  onUsageMonitorStatsChanged: (callback: (snapshot: import('../shared/types').UsageMonitorSnapshot) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, snapshot: import('../shared/types').UsageMonitorSnapshot) => {
+      callback(snapshot)
+    }
+    ipcRenderer.on(IPC_CHANNELS.USAGE_MONITOR_STATS_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.USAGE_MONITOR_STATS_CHANGED, handler)
+    }
+  },
+  getUsageMonitorConfig: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.USAGE_MONITOR_GET_CONFIG),
+  setUsageMonitorPlan: (plan: 'pro' | 'max5' | 'max20') =>
+    ipcRenderer.invoke(IPC_CHANNELS.USAGE_MONITOR_SET_PLAN, plan),
+  setUsageMonitorProLimit: (limit: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.USAGE_MONITOR_SET_PRO_LIMIT, limit),
+  getUsageMonitorEnabled: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.USAGE_MONITOR_GET_ENABLED),
+  setUsageMonitorEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.USAGE_MONITOR_SET_ENABLED, enabled),
+  onUsageMonitorConfigChanged: (callback: (config: import('../shared/types').UsageMonitorConfigPayload) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, config: import('../shared/types').UsageMonitorConfigPayload) => {
+      callback(config)
+    }
+    ipcRenderer.on(IPC_CHANNELS.USAGE_MONITOR_CONFIG_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.USAGE_MONITOR_CONFIG_CHANGED, handler)
+    }
+  },
   updateBadgeCount: (count: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.BADGE_UPDATE, count),
   clearBadgeCount: () =>

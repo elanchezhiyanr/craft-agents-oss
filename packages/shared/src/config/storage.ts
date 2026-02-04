@@ -42,6 +42,8 @@ export interface StoredConfig {
   model?: string;
   // Notifications
   notificationsEnabled?: boolean;  // Desktop notifications for task completion (default: true)
+  // Usage Monitor
+  usageMonitorEnabled?: boolean;  // Sidebar usage monitor (default: true)
   // Appearance
   colorTheme?: string;  // ID of selected preset theme (e.g., 'dracula', 'nord'). Default: 'default'
   // Auto-update
@@ -249,6 +251,29 @@ export function setNotificationsEnabled(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.notificationsEnabled = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Get whether the Usage Monitor is enabled.
+ * Defaults to true if not set.
+ */
+export function getUsageMonitorEnabled(): boolean {
+  const config = loadStoredConfig();
+  if (config?.usageMonitorEnabled !== undefined) {
+    return config.usageMonitorEnabled;
+  }
+  const defaults = loadConfigDefaults();
+  return defaults.defaults.usageMonitorEnabled ?? true;
+}
+
+/**
+ * Set whether the Usage Monitor is enabled.
+ */
+export function setUsageMonitorEnabled(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.usageMonitorEnabled = enabled;
   saveConfig(config);
 }
 
